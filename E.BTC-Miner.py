@@ -118,7 +118,7 @@ def generate_new_wallet():
 
 
 def mint_tokens(wallet_address, private_key):
-    time.sleep(5)
+    time.sleep(15)
     retry_attempts = 3
     for attempt in range(retry_attempts):
         try:
@@ -227,6 +227,8 @@ def transfer_tokens(from_address, private_key, to_address, amount):
 
 def send_pls(from_address, private_key, to_address, amount):
     # Convert the amount to Wei
+
+
     amount_in_wei = web3.toWei(amount, 'ether')
     retry_attempts = 3  # Define the number of retry attempts
 
@@ -234,17 +236,30 @@ def send_pls(from_address, private_key, to_address, amount):
         try:
             nonce = web3.eth.getTransactionCount(from_address, 'pending')
             chain_id = web3.eth.chain_id
-            gas_price = web3.eth.gas_price  # Fetch current gas price
-            gas_limit = 21000  # Standard gas limit for a simple PLS transfer
 
-            # Calculate the total gas cost
+            gas_price = web3.eth.gas_price
+            gas_limit = 21000
             gas_cost = gas_price * gas_limit
 
             # Fetch the current balance
-            current_balance = web3.eth.getBalance(from_address)
+            current_balance_wei = web3.eth.getBalance(from_address)
+            current_balance = web3.fromWei(current_balance_wei, 'ether')
+            amount_in_wei = web3.toWei(amount, 'ether')
+
+            # Calculate the remaining balance after the amount to be sent
+            remaining_balance_wei = current_balance_wei - amount_in_wei
+            remaining_balance = web3.fromWei(remaining_balance_wei, 'ether')
+
+            # Calculate what percentage of the balance will be left
+            percent_left = (remaining_balance_wei / current_balance_wei) * 100 if current_balance_wei != 0 else 0
+
+            print(f"Current balance in seeder account: {GREEN}{current_balance:,.2f} PLS{RESET}")
+            print(f"Amount to be sent: {YELLOW}{amount:,.2f} PLS{RESET}")
+            print(f"Estimated balance left in seeder account: {GREEN}{remaining_balance:,.2f} PLS{RESET} ({percent_left:.2f}%)")
+
 
             # Ensure there's enough balance to cover the transfer and the gas
-            if current_balance >= amount_in_wei + gas_cost:
+            if current_balance_wei >= amount_in_wei + gas_cost:
                 tx = {
                     'nonce': nonce,
                     'to': to_address,
