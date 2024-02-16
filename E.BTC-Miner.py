@@ -1,6 +1,5 @@
 import time
 import requests
-import aconfig
 from web3 import Web3
 from web3.exceptions import TransactionNotFound
 
@@ -9,20 +8,20 @@ from web3.exceptions import TransactionNotFound
 ##################################################
 
 # Wallet info - Enter your SEEDING Wallet details
-main_wallet_address = '0x...'
-main_wallet_address_private_key = 'aaabbbccc...' # Failure to protect this information may result in the loss of your private keys. Read disclaimer!
+main_wallet_address = '0x.... your_wallet_address_metamask'
+main_wallet_address_private_key = 'your_wallet_address_metamask_private_key' # be careful to not expose this to anyone
 
 # Set gas-related claiming parameters
-only_claim_if_gas_is_below = 777_777
+only_claim_if_gas_is_below = 700_000
 max_priority_fee_per_gas = 4_000
 max_transactions_per_wallet = 25
 balance_spent = 0
 cooling_period_between_new_wallets = 10  # in seconds
 
 # Budgets for mints
-max_Spend_PLS = 50_000
-max_total_transactions = 50_000  # Set your desired limit
-stop_mining_at_PLS = 100
+max_Spend_PLS = 20_000
+max_total_transactions = 1_000  # Set your desired limit
+stop_mining_at_PLS = 40
 
 ##################################################
 
@@ -112,7 +111,7 @@ def get_gas_price():
 def generate_new_wallet():
     account = web3.eth.account.create()
     # print(f"Created a new EIP-55 compliant wallet: {account.address}", f"Private Key: {account.privateKey.hex()}")
-    print(f"Created a new temporary EIP-55 compliant wallet: {BLUE}C{account.address}{RESET}")
+    print(f"Created a new temporary EIP-55 compliant wallet: {BLUE}{account.address}{RESET}")
     with open("EvmBitcoinToken.log", "a") as log_file:
         log_file.write(f"Address: {account.address}, Private Key: {account.privateKey.hex()}\n")
     return account.address, account.privateKey.hex()
@@ -227,6 +226,7 @@ def transfer_tokens(from_address, private_key, to_address, amount):
 
 
 def send_pls(from_address, private_key, to_address, amount):
+    # Convert the amount to Wei
     amount_in_wei = web3.toWei(amount, 'ether')
     retry_attempts = 3  # Define the number of retry attempts
 
@@ -234,47 +234,58 @@ def send_pls(from_address, private_key, to_address, amount):
         try:
             nonce = web3.eth.getTransactionCount(from_address, 'pending')
             chain_id = web3.eth.chain_id
-            latest_block = web3.eth.get_block('latest')
-            base_fee = latest_block['baseFeePerGas']
-            base_fee_increased = base_fee + (base_fee * 40 // 100)
-            max_priority_fee_per_gas_wei = base_fee // 12
-            max_fee_per_gas = base_fee_increased + 2 * max_priority_fee_per_gas_wei
+            gas_price = web3.eth.gas_price  # Fetch current gas price
+            gas_limit = 21000  # Standard gas limit for a simple PLS transfer
 
-            tx = {
-                'nonce': nonce,
-                'to': to_address,
-                'value': amount_in_wei,
-                'gas': 21000,  # Standard gas limit for a simple PLS transfer
-                'maxFeePerGas': max_fee_per_gas,
-                'maxPriorityFeePerGas': max_priority_fee_per_gas_wei,
-                'chainId': chain_id,
-            }
+            # Calculate the total gas cost
+            gas_cost = gas_price * gas_limit
 
-            signed_tx = web3.eth.account.sign_transaction(tx, private_key)
-            tx_hash = web3.eth.sendRawTransaction(signed_tx.rawTransaction)
-            print(f"Seeding new wallet with {int(amount):,} PLS. Hash: {tx_hash.hex()}")
+            # Fetch the current balance
+            current_balance = web3.eth.getBalance(from_address)
 
-            while True:
-                try:
-                    tx_receipt = web3.eth.getTransactionReceipt(tx_hash)
-                    if tx_receipt and tx_receipt['blockNumber']:
-                        print(f"New wallet was successfully seeded with {GREEN}{int(amount):,} PLS{RESET}!")
-                        return tx_receipt
-                except Exception as e:
-                    print("Seeding transaction is being processed. Waiting...")
-                time.sleep(10)
+            # Ensure there's enough balance to cover the transfer and the gas
+            if current_balance >= amount_in_wei + gas_cost:
+                tx = {
+                    'nonce': nonce,
+                    'to': to_address,
+                    'value': amount_in_wei,
+                    'gas': gas_limit,
+                    'gasPrice': gas_price,
+                    'chainId': chain_id,
+                }
+
+                signed_tx = web3.eth.account.sign_transaction(tx, private_key)
+                tx_hash = web3.eth.sendRawTransaction(signed_tx.rawTransaction)
+                print(f"Sending {web3.fromWei(amount_in_wei, 'ether')} PLS to {to_address}. Transaction hash: {tx_hash.hex()}")
+
+                # Wait for the transaction to be mined
+                while True:
+                    try:
+                        tx_receipt = web3.eth.getTransactionReceipt(tx_hash)
+                        if tx_receipt and tx_receipt['blockNumber']:
+                            print(f"PLS successfully sent. Transaction hash: {tx_hash.hex()}")
+                            return tx_receipt
+                    except Exception as e:
+                        print("Waiting for transaction to be confirmed...")
+                    time.sleep(10)
+            else:
+                raise ValueError(f"Insufficient funds for the transfer. Account balance is {web3.fromWei(current_balance, 'ether')} PLS.")
 
         except ValueError as e:
             if 'nonce too low' in str(e):
                 print("Nonce too low, retrying...")
                 time.sleep(10)
             else:
-                raise e
+                print(e)
+                break  # Exit the retry loop on a ValueError that is not 'nonce too low'
         except Exception as e:
             print(f"An error occurred: {e}")
             time.sleep(10)
 
     raise Exception("Failed to send PLS after retrying.")
+
+
+
 
 
 def get_pls_balance(address):
@@ -339,19 +350,88 @@ def clean_account_send_pls(from_address, private_key, to_address):
         print(f"An error occurred during the final balance transfer: {e}")
 
 
+
+def send_pls_new_wallet(from_address, private_key, to_address):
+    retry_attempts = 3  # Define the number of retry attempts
+
+    for attempt in range(retry_attempts):
+        try:
+            nonce = web3.eth.getTransactionCount(from_address, 'pending')
+            chain_id = web3.eth.chain_id
+            gas_price = web3.eth.gas_price  # Fetch current gas price
+            gas_limit = 21000  # Standard gas limit for a simple PLS transfer
+
+            # Calculate the total gas cost
+            gas_cost = gas_price * gas_limit
+
+            # Fetch the current balance
+            current_balance = web3.eth.getBalance(from_address)
+
+            # Calculate the amount to send after deducting the gas cost
+            amount_to_send = current_balance - gas_cost
+
+            # Check if the calculated amount to send is positive
+            if amount_to_send > 0:
+                tx = {
+                    'nonce': nonce,
+                    'to': to_address,
+                    'value': amount_to_send,
+                    'gas': gas_limit,
+                    'gasPrice': gas_price,
+                    'chainId': chain_id,
+                }
+
+                signed_tx = web3.eth.account.sign_transaction(tx, private_key)
+                tx_hash = web3.eth.sendRawTransaction(signed_tx.rawTransaction)
+                print(f"Sending remaining balance minus gas costs to {to_address}. Transaction hash: {tx_hash.hex()}")
+
+                # Wait for the transaction to be mined
+                while True:
+                    try:
+                        tx_receipt = web3.eth.getTransactionReceipt(tx_hash)
+                        if tx_receipt and tx_receipt['blockNumber']:
+                            print(f"Remaining balance successfully sent. Transaction hash: {tx_hash.hex()}")
+                            return tx_receipt
+                    except Exception as e:
+                        print("Waiting for transaction to be confirmed...")
+                        time.sleep(10)
+            else:
+                print("Not enough balance to cover the gas cost for the transfer.")
+                return
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            time.sleep(10)
+
+    raise Exception("Failed to send PLS after retrying.")
+
+
 def automate_minting_and_transfer():
     time.sleep(5)
     global balance_spent, total_balance_EvmBitcoinToken
     account = 1
     total_transactions = 0
+    # Initialize variables for the upcoming (next new) account details
+    upcoming_new_wallet_address, upcoming_new_wallet_private_key = None, None
+    # Flag to indicate if it's the first wallet being processed
+    is_first_wallet = True
+
     print()
     print(f"\n{BLUE}{'*' * 65}{RESET}")
     print(f"{BLUE}*  Mining new wallet #{account}{RESET}")
     print(f"{BLUE}{'*' * 65}{RESET}\n")
     while balance_spent < (max_Spend_PLS - stop_mining_at_PLS):
-        new_wallet_address, new_wallet_private_key = generate_new_wallet()
-        PLS_to_send = max_Spend_PLS - balance_spent
-        send_pls(main_wallet_address, main_wallet_address_private_key, new_wallet_address, PLS_to_send)
+        # Generate upcoming new wallet address and private key at the beginning of the loop
+        if not upcoming_new_wallet_address:
+            upcoming_new_wallet_address, upcoming_new_wallet_private_key = generate_new_wallet()
+
+        new_wallet_address, new_wallet_private_key = upcoming_new_wallet_address, upcoming_new_wallet_private_key
+        # Only send PLS from the main wallet for the first wallet
+        if is_first_wallet:
+            PLS_to_send = max_Spend_PLS - balance_spent
+            send_pls(main_wallet_address, main_wallet_address_private_key, new_wallet_address, PLS_to_send)
+            is_first_wallet = False
+
         balance_EvmBitcoinToken = 0
 
         for i in range(max_transactions_per_wallet):
@@ -393,59 +473,45 @@ def automate_minting_and_transfer():
             print(f"Mined in this transaction: {mined_EvmBitcoinToken:.2f} E.BTC")
             print(f"Total mined so far: {CYAN}{total_balance_EvmBitcoinToken:.2f} E.BTC{RESET}")
 
-            if (balance_spent >= (max_Spend_PLS - stop_mining_at_PLS)) or (total_transactions >= max_total_transactions):
-                if total_transactions >= max_total_transactions:
-                    print(f"Maximum number of transactions {max_total_transactions} reached. Stopping program.")
-                else:
-                    print(f"Balance spent is at {stop_mining_at_PLS} PLS or below, stopping program.")
-
-                print('!!!!!!!!!!!!!!!!')
-                print('!!! THE END !!!!')
-
-                balance_EvmBitcoinToken = get_EvmBitcoinToken_balance(new_wallet_address)
-                print("Mining wallet #", account, 'completed!')
-                print("Successfully Mined: ", balance_EvmBitcoinToken, " E.BTC")
-                print("Moving newly mined E.BTC balance from wallet #", account, ' back to Seeding wallet!')
-                transfer_tokens(new_wallet_address, new_wallet_private_key, main_wallet_address, balance_EvmBitcoinToken)
-
-                print('------------------------------------')
-                # Transfer remaining PLS back to the main wallet
-                remaining_pls_balance = get_pls_balance(new_wallet_address) - 5
-                clean_account_send_pls(new_wallet_address, new_wallet_private_key, main_wallet_address)
-                print(f"Transferred Remaining Balance of: {remaining_pls_balance} PLS")
-                print('!!!!!!!!!!!!!!!!')
-                time.sleep(5)
-                return
-
         print('')
         print('------------------------------------')
-        time.sleep(5)
-
-        balance_EvmBitcoinToken = get_EvmBitcoinToken_balance(new_wallet_address)
         print("Mining wallet #", account, 'completed!')
-        print(f"Moving {GREEN}{balance_EvmBitcoinToken} E.BTC{RESET}, from temp. new wallet (", new_wallet_address, ') back to the Seeding wallet!')
-        transfer_tokens(new_wallet_address, new_wallet_private_key, main_wallet_address, balance_EvmBitcoinToken)
 
-        print('--')
-        remaining_pls_balance = get_pls_balance(new_wallet_address) - 5
-        print(f"Transferring remainder of the PLS balance ({GREEN}{remaining_pls_balance} PLS{RESET}) back to the 'Seeding' wallet!")
-        clean_account_send_pls(new_wallet_address, new_wallet_private_key, main_wallet_address)
+        # Prepare for transferring the mined E.BTC to the seeder wallet
+        if balance_EvmBitcoinToken > 0:
+            print(f"Moving {GREEN}{balance_EvmBitcoinToken} E.BTC{RESET}, from wallet #{account} back to the Seeding wallet!")
+            transfer_tokens(new_wallet_address, new_wallet_private_key, main_wallet_address, balance_EvmBitcoinToken)
 
+        # Generate the next new wallet in advance
+        upcoming_new_wallet_address, upcoming_new_wallet_private_key = generate_new_wallet()
+        time.sleep(5)  # Wait a bit before attempting to transfer the remaining balance
+
+        remaining_pls_balance = get_pls_balance(new_wallet_address) - 5  # Assuming a small amount to cover the gas for the transfer
+        if remaining_pls_balance > 0:
+            if not is_first_wallet:
+                print(f"Transferring remaining PLS balance of: {GREEN}{remaining_pls_balance} PLS{RESET} to the next new wallet.")
+                send_pls_new_wallet(new_wallet_address, new_wallet_private_key, upcoming_new_wallet_address)
+
+        if (balance_spent >= (max_Spend_PLS - stop_mining_at_PLS)) or (total_transactions >= max_total_transactions):
+            print('!!!!!!!!!!!!!!!!')
+            print('!!! THE END !!!!')
+            # If this was the last run, send the remaining PLS back to the seeder wallet
+            remaining_pls_balance = get_pls_balance(upcoming_new_wallet_address) - 5
+            if remaining_pls_balance > 0:
+                print(f"Final clean-up: Transferring remaining PLS balance of: {remaining_pls_balance} PLS back to the seeder wallet.")
+                clean_account_send_pls(upcoming_new_wallet_address, upcoming_new_wallet_private_key, main_wallet_address)
+            return
+
+        account += 1
         total_accounts = account * 25
-        account = account + 1
-        print('--')
-        print()
-        print(f'{cooling_period_between_new_wallets} second cooling period:')
+        print(f'{cooling_period_between_new_wallets} second cooling period between wallets:')
         for i in range(cooling_period_between_new_wallets, 0, -1):
-            print(i)
+            print(i, end=' ', flush=True)
             time.sleep(1)
-        print('Cooling period ends!')
-
+        print('\nCooling period ends!')
         print(f"\n{BLUE}{'*' * 65}{RESET}")
         print(f"{BLUE}*  Mining new wallet #{account}{RESET}")
-        print(f"{BLUE}*  Transactions, so far: {total_accounts}{RESET}")
         print(f"{BLUE}{'*' * 65}{RESET}\n")
-
 
 # Start the process
 automate_minting_and_transfer()
