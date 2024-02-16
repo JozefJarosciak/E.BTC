@@ -82,7 +82,8 @@ Retrieve the most recent private key (the last one from the bottom) in the log a
 
 This will enable you to manually transfer any E.BTC or PLS balances back to your primary 'Seeding' wallet.
 
-![image](https://github.com/JozefJarosciak/E.BTC/assets/3492464/72d5abe4-5f65-4dce-81e6-7fa74288eab0)
+![image](https://github.com/JozefJarosciak/E.BTC/assets/3492464/3666ad21-ebec-4fd3-9583-6cc448db21da)
+
 
 
 ## E-BTC URLs
