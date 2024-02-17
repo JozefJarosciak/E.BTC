@@ -586,7 +586,7 @@ def automate_minting_and_transfer():
             time.sleep(1)
         print('\nCooling period ends!')
         print(f"\n{BLUE}{'*' * 65}{RESET}")
-        print(f"{BLUE}*  Mining new wallet #{account} ({RESET}{MAGENTA}{new_wallet_address}{RESET})")
+        print(f"{BLUE}*  Mining new wallet #{account}{RESET}")
         print(f"{BLUE}{'*' * 65}{RESET}\n")
 
 
