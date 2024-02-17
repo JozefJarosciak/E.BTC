@@ -3,7 +3,7 @@
 
 ## What is E.BTC?
 
-- EVMBitcoinToken is a meme coin on Pulsechain with a 21M supply.
+- E.BTC (EVM Bitcoin) is a token with a 21M supply.
 - Initial mints (first 210,000 transactions) produced 50 eBTC rewards with a maximum of 25 transactions per wallet. 
 - Every 210,000 transactions, the mint reward decreases by half.
 - URL: https://www.notyourmomsbitcoin.com
