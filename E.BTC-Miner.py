@@ -51,7 +51,7 @@ rpc_url = f"https://rpc.pulsechain.com"
 web3 = Web3(Web3.HTTPProvider(rpc_url))
 
 # EvmBitcoinToken - Smart contract details
-contract_address = Web3.toChecksumAddress('0x10d46D6F8f691d3439A781FC5E7BE598Ab67b393')
+contract_address = web3.toChecksumAddress('0x10d46D6F8f691d3439A781FC5E7BE598Ab67b393')
 contract_abi = [{"inputs": [], "stateMutability": "nonpayable", "type": "constructor"}, {
     "inputs": [{"internalType": "address", "name": "spender", "type": "address"}, {"internalType": "uint256", "name": "allowance", "type": "uint256"}, {"internalType": "uint256", "name": "needed", "type": "uint256"}],
     "name": "ERC20InsufficientAllowance", "type": "error"}, {"inputs": [{"internalType": "address", "name": "sender", "type": "address"}, {"internalType": "uint256", "name": "balance", "type": "uint256"},
