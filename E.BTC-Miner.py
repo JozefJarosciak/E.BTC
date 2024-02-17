@@ -9,8 +9,8 @@ from web3.exceptions import TransactionNotFound
 ##################################################
 
 # Wallet info - Enter your SEEDING Wallet details
-main_wallet_address = '0x.... your_wallet_address_metamask'
-main_wallet_address_private_key = 'your_wallet_address_metamask_private_key' # be careful to not expose this to anyone
+main_wallet_address = 'your_wallet_address_metamask'
+main_wallet_address_private_key = 'your_wallet_address_metamask_private_key' # Be extra careful to not expose this to anyone!!!
 
 # Set gas-related claiming parameters
 only_claim_if_gas_is_below = 700_000
@@ -25,6 +25,7 @@ max_total_transactions = 1_000  # Set your desired limit
 stop_mining_at_PLS = 40
 
 ##################################################
+
 
 # ANSI escape code for colors
 RED = '\033[91m'
@@ -95,7 +96,7 @@ def cleanup_and_transfer_if_key_provided():
         eth_public_key = sys.argv[1]
 
         # Ensure the public key is valid (basic check)
-        if not Web3.isAddress(eth_public_key):
+        if not web3.isAddress(eth_public_key):
             print(f"{RED}Invalid Ethereum public key provided.{RESET}")
             return
 
@@ -161,7 +162,7 @@ def get_private_key_for_public_key(public_key, log_file_path="EvmBitcoinToken.lo
     """
     try:
         # Ensure the public key is in the correct format
-        public_key = Web3.toChecksumAddress(public_key)
+        public_key = web3.toChecksumAddress(public_key)
     except ValueError:
         print("Invalid Ethereum address provided.")
         return None
