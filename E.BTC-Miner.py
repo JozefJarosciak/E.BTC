@@ -1,3 +1,4 @@
+import sys
 import time
 import requests
 from web3 import Web3
@@ -25,8 +26,8 @@ stop_mining_at_PLS = 40
 
 ##################################################
 
-
 # ANSI escape code for colors
+RED = '\033[91m'
 GREEN = '\033[92m'
 YELLOW = '\033[93m'
 CYAN = '\033[96m'
@@ -45,12 +46,9 @@ print(f"2. Mining will stop if the balance is below {YELLOW}{stop_mining_at_PLS}
 print(f"3. E.BTC will be mined only when gwei is below {YELLOW}{only_claim_if_gas_is_below:,}{RESET}.")
 print(f"{CYAN}{'=' * 60}{RESET}\n")
 
-
 total_balance_EvmBitcoinToken = 0
 rpc_url = f"https://rpc.pulsechain.com"
 web3 = Web3(Web3.HTTPProvider(rpc_url))
-
-
 
 # EvmBitcoinToken - Smart contract details
 contract_address = Web3.toChecksumAddress('0x10d46D6F8f691d3439A781FC5E7BE598Ab67b393')
@@ -91,6 +89,42 @@ contract_abi = [{"inputs": [], "stateMutability": "nonpayable", "type": "constru
 contract = web3.eth.contract(address=contract_address, abi=contract_abi)
 
 
+def cleanup_and_transfer_if_key_provided():
+    # Check if an Ethereum public key is provided as a command-line argument
+    if len(sys.argv) > 1:
+        eth_public_key = sys.argv[1]
+
+        # Ensure the public key is valid (basic check)
+        if not Web3.isAddress(eth_public_key):
+            print(f"{RED}Invalid Ethereum public key provided.{RESET}")
+            return
+
+        # Fetch balances
+        ebtc_balance = get_EvmBitcoinToken_balance(eth_public_key)
+        pls_balance = get_pls_balance(eth_public_key)
+
+        print(f"{CYAN}E.BTC balance to be transferred: {YELLOW}{ebtc_balance} E.BTC{RESET}")
+        print(f"{CYAN}PLS balance to be transferred: {YELLOW}{pls_balance} PLS{RESET}")
+
+        # Assuming you have the corresponding private key access method here
+        private_key = get_private_key_for_public_key(eth_public_key)  # Implement this function based on your setup
+
+        # Transfer E.BTC if balance is greater than 0
+        if ebtc_balance > 0:
+            transfer_tokens(eth_public_key, private_key, main_wallet_address, ebtc_balance)
+        else:
+            print(f"{GREEN}No E.BTC balance to transfer.{RESET}")
+
+        # Transfer PLS if balance is greater than 0
+        if pls_balance > 0:
+            clean_account_send_pls(eth_public_key, private_key, main_wallet_address)
+        else:
+            print(f"{GREEN}No PLS balance to transfer.{RESET}")
+
+        print("Transfers completed. Exiting program.")
+        sys.exit(0)  # Exit the program after the transfers are completed
+
+
 def get_gas_price():
     retries = 10
     for attempt in range(retries):
@@ -115,6 +149,39 @@ def generate_new_wallet():
     with open("EvmBitcoinToken.log", "a") as log_file:
         log_file.write(f"Address: {account.address}, Private Key: {account.privateKey.hex()}\n")
     return account.address, account.privateKey.hex()
+
+
+def get_private_key_for_public_key(public_key, log_file_path="EvmBitcoinToken.log"):
+    """
+    Retrieve the private key for a given public key from the log file.
+
+    :param public_key: The public Ethereum address to find the private key for.
+    :param log_file_path: Path to the log file containing the address and private key pairs.
+    :return: The private key if found, None otherwise.
+    """
+    try:
+        # Ensure the public key is in the correct format
+        public_key = Web3.toChecksumAddress(public_key)
+    except ValueError:
+        print("Invalid Ethereum address provided.")
+        return None
+
+    try:
+        with open(log_file_path, "r") as log_file:
+            for line in log_file:
+                if public_key in line:
+                    # Assuming the line format is 'Address: {address}, Private Key: {privateKey}\n'
+                    parts = line.split(", Private Key: ")
+                    if len(parts) == 2:
+                        return parts[1].strip()  # Remove any trailing newline or spaces
+    except FileNotFoundError:
+        print(f"Log file not found at path: {log_file_path}")
+    except Exception as e:
+        print(f"An error occurred while searching for the private key: {e}")
+
+    print("Private key not found for the provided public address.")
+    return None
+
 
 
 def mint_tokens(wallet_address, private_key):
@@ -228,7 +295,6 @@ def transfer_tokens(from_address, private_key, to_address, amount):
 def send_pls(from_address, private_key, to_address, amount):
     # Convert the amount to Wei
 
-
     amount_in_wei = web3.toWei(amount, 'ether')
     retry_attempts = 3  # Define the number of retry attempts
 
@@ -256,7 +322,6 @@ def send_pls(from_address, private_key, to_address, amount):
             print(f"Current balance in seeder account: {GREEN}{current_balance:,.2f} PLS{RESET}")
             print(f"Amount to be sent: {YELLOW}{amount:,.2f} PLS{RESET}")
             print(f"Estimated balance left in seeder account: {GREEN}{remaining_balance:,.2f} PLS{RESET} ({percent_left:.2f}%)")
-
 
             # Ensure there's enough balance to cover the transfer and the gas
             if current_balance_wei >= amount_in_wei + gas_cost:
@@ -298,9 +363,6 @@ def send_pls(from_address, private_key, to_address, amount):
             time.sleep(10)
 
     raise Exception("Failed to send PLS after retrying.")
-
-
-
 
 
 def get_pls_balance(address):
@@ -363,7 +425,6 @@ def clean_account_send_pls(from_address, private_key, to_address):
             print("Not enough balance to cover the gas for the final balance transfer.")
     except Exception as e:
         print(f"An error occurred during the final balance transfer: {e}")
-
 
 
 def send_pls_new_wallet(from_address, private_key, to_address):
@@ -453,7 +514,7 @@ def automate_minting_and_transfer():
             total_transactions += 1
             print('')
             print('------------------------------------')
-            print(f"{MAGENTA}Preparing mining transaction #{i + 1} in wallet #{account}{RESET}")
+            print(f"{MAGENTA}Preparing mining transaction #{i + 1} in wallet #{account} ({new_wallet_address}){RESET}")
 
             while True:
                 gas_price = get_gas_price()
@@ -525,8 +586,12 @@ def automate_minting_and_transfer():
             time.sleep(1)
         print('\nCooling period ends!')
         print(f"\n{BLUE}{'*' * 65}{RESET}")
-        print(f"{BLUE}*  Mining new wallet #{account}{RESET}")
+        print(f"{BLUE}*  Mining new wallet #{account} ({RESET}{MAGENTA}{new_wallet_address}{RESET})")
         print(f"{BLUE}{'*' * 65}{RESET}\n")
 
+
 # Start the process
-automate_minting_and_transfer()
+if __name__ == "__main__":
+    cleanup_and_transfer_if_key_provided()
+    # If no key is provided or the cleanup function exits, continue with mining.
+    automate_minting_and_transfer()
