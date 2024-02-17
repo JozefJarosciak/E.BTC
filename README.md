@@ -87,9 +87,11 @@ python E.BTC-Miner.py <Public_Address_of_Last_Mined_Wallet>
 
 ## Troubleshooting
 
-In case the program halts unexpectedly and cannot resume on its own, locate the EvmBitcoinToken.log that is automatically created every time the program runs and contains every EIP-55-compliant address created by the program along with its private key. 
+In case the program halts unexpectedly and cannot resume on its own, and the crash recovery option (outlined above) did not help you, follow these instructions:
 
-Retrieve the most recent private key (the last one from the bottom) in the log and import it into your preferred wallet, such as Metamask or Rabby.
+Locate the EvmBitcoinToken.log that is automatically created every time the program runs and contains every EIP-55-compliant address created by the program along with its private key. 
+
+Retrieve the private key for the account in question (the last one from the bottom - if you're running only one instance of the miner) from the log file and import it into your preferred wallet, such as Metamask or Rabby.
 
 This will enable you to manually transfer any E.BTC or PLS balances back to your primary 'Seeding' wallet.
 
