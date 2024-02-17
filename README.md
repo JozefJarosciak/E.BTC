@@ -75,13 +75,17 @@ python E.BTC-Miner.py
 The script will automatically handle the mining process based on the configured parameters, including wallet creation, token minting, and funds transfer.
 
 
-Crash recovery usage:
+
+
+## Crash recovery usage
 
 In the event of an unexpected program termination, you can gracefully recover and secure your mined E.BTC and PLS balances. To do so, restart the script with the public address of the most recently mined wallet as an argument. This action will ensure any remaining balances are safely transferred back to your main (seeder) wallet:
 
 ```bash
 python E.BTC-Miner.py <Public_Address_of_Last_Mined_Wallet>
 ```
+
+![image](https://github.com/JozefJarosciak/E.BTC/assets/3492464/e0308e1c-32a5-41d1-86b7-6b444f57ef8c)
 
 
 
