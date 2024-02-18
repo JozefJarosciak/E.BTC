@@ -22,7 +22,7 @@ cooling_period_between_new_wallets = 10  # in seconds
 # Budgets for mints
 max_Spend_PLS = 20_000
 max_total_transactions = 1_000  # Set your desired limit
-stop_mining_at_PLS = 40
+stop_mining_at_PLS = 100 # Do not go below 100 PLS, you may have an issue cleaning up the last wallet
 
 ##################################################
 
