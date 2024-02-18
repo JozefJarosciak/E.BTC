@@ -13,16 +13,16 @@ main_wallet_address = 'your_wallet_address_metamask'
 main_wallet_address_private_key = 'your_wallet_address_metamask_private_key' # Be extra careful to not expose this to anyone!!!
 
 # Set gas-related claiming parameters
-only_claim_if_gas_is_below = 700_000
+only_claim_if_gas_is_below = 500_000
 max_priority_fee_per_gas = 4_000
 max_transactions_per_wallet = 25
 balance_spent = 0
 cooling_period_between_new_wallets = 10  # in seconds
 
 # Budgets for mints
-max_Spend_PLS = 20_000
+max_Spend_PLS = 5_000
 max_total_transactions = 1_000  # Set your desired limit
-stop_mining_at_PLS = 100 # Do not go below 100 PLS, you may have an issue cleaning up the last wallet
+stop_mining_at_PLS = 150 # Do not go lower than this
 
 ##################################################
 
@@ -37,15 +37,23 @@ BLUE = '\033[94m'
 MAGENTA = '\033[95m'
 
 # Print out the configuration settings
-print(f"{CYAN}{'=' * 60}{RESET}")
-print(f"{CYAN}||{'E-BTC AUTO MINER v1.0'.center(56)}||{RESET}")
-print(f"{GREEN}User Configuration:{RESET}")
-print(f"1. Mine E.BTC until {YELLOW}either{RESET} of these conditions are met:")
-print(f"   - A maximum spend limit of {YELLOW}{max_Spend_PLS:,} PLS{RESET} is reached.")
-print(f"   - A total of {YELLOW}{max_total_transactions}{RESET} transactions have been processed.")
-print(f"2. Mining will stop if the balance is below {YELLOW}{stop_mining_at_PLS} PLS{RESET}.")
-print(f"3. E.BTC will be mined only when gwei is below {YELLOW}{only_claim_if_gas_is_below:,}{RESET}.")
-print(f"{CYAN}{'=' * 60}{RESET}\n")
+if len(sys.argv) > 1:
+    # If an argument is provided, print a simplified message box
+    print(f"{CYAN}{'=' * 60}{RESET}")
+    print(f"{CYAN}||{'E-BTC AUTO MINER v1.0'.center(56)}||{RESET}")
+    print(f"{CYAN}||{'Cleanup mode initiated'.center(56)}||{RESET}")  # Adding a line for cleanup indication
+    print(f"{CYAN}{'=' * 60}{RESET}\n")
+else:
+    # If no arguments are provided, print out the full configuration settings
+    print(f"{CYAN}{'=' * 60}{RESET}")
+    print(f"{CYAN}||{'E-BTC AUTO MINER v1.0'.center(56)}||{RESET}")
+    print(f"{GREEN}User Configuration:{RESET}")
+    print(f"1. Mine E.BTC until {YELLOW}either{RESET} of these conditions are met:")
+    print(f"   - A maximum spend limit of {YELLOW}{max_Spend_PLS:,} PLS{RESET} is reached.")
+    print(f"   - A total of {YELLOW}{max_total_transactions}{RESET} transactions have been processed.")
+    print(f"2. Mining will stop if the balance is below {YELLOW}{stop_mining_at_PLS} PLS{RESET}.")
+    print(f"3. E.BTC will be mined only when gwei is below {YELLOW}{only_claim_if_gas_is_below:,}{RESET}.")
+    print(f"{CYAN}{'=' * 60}{RESET}\n")
 
 total_balance_EvmBitcoinToken = 0
 rpc_url = f"https://rpc.pulsechain.com"
@@ -91,39 +99,61 @@ contract = web3.eth.contract(address=contract_address, abi=contract_abi)
 
 
 def cleanup_and_transfer_if_key_provided():
-    # Check if an Ethereum public key is provided as a command-line argument
+    # Check for Ethereum public key argument
     if len(sys.argv) > 1:
         eth_public_key = sys.argv[1]
 
-        # Ensure the public key is valid (basic check)
+        # Validate Ethereum public key
         if not web3.isAddress(eth_public_key):
             print(f"{RED}Invalid Ethereum public key provided.{RESET}")
-            return
+            sys.exit(1)  # Exit with an error
 
-        # Fetch balances
+        # Fetch PLS balance of the supplied public key
+        eth_public_key_balance = get_pls_balance(eth_public_key)
+
+        # Check if the balance is below 1 PLS
+        if eth_public_key_balance < 1:
+            print(f"{RED}Balance of PLS in {eth_public_key} is below 1, no action will be taken.{RESET}")
+            sys.exit(0)  # Exit without performing any transfers
+
+        main_wallet_balance = get_pls_balance(main_wallet_address)
+
+        # Transfer PLS from main to eth_public_key if conditions are met
+        if eth_public_key_balance < 50 and main_wallet_balance >= 200:
+            print(f"{CYAN}Low balance detected. Sending 100 PLS from the seeding account to {eth_public_key}{RESET}")
+            send_pls(main_wallet_address, main_wallet_address_private_key, eth_public_key, 100)
+            print(f"{GREEN}100 PLS transferred to bolster {eth_public_key}.{RESET}")
+
+        # Now, handle E.BTC and remaining PLS transfer
         ebtc_balance = get_EvmBitcoinToken_balance(eth_public_key)
-        pls_balance = get_pls_balance(eth_public_key)
+        pls_balance = get_pls_balance(eth_public_key)  # Recheck balance after potential transfer
 
         print(f"{CYAN}E.BTC balance to be transferred: {YELLOW}{ebtc_balance} E.BTC{RESET}")
         print(f"{CYAN}PLS balance to be transferred: {YELLOW}{pls_balance} PLS{RESET}")
 
-        # Assuming you have the corresponding private key access method here
-        private_key = get_private_key_for_public_key(eth_public_key)  # Implement this function based on your setup
+        private_key = get_private_key_for_public_key(eth_public_key)  # Ensure this function securely retrieves the private key
 
         # Transfer E.BTC if balance is greater than 0
         if ebtc_balance > 0:
             transfer_tokens(eth_public_key, private_key, main_wallet_address, ebtc_balance)
+            print(f"{GREEN}E.BTC balance transferred.{RESET}")
         else:
             print(f"{GREEN}No E.BTC balance to transfer.{RESET}")
 
         # Transfer PLS if balance is greater than 0
         if pls_balance > 0:
             clean_account_send_pls(eth_public_key, private_key, main_wallet_address)
+            print(f"{GREEN}PLS balance transferred.{RESET}")
         else:
             print(f"{GREEN}No PLS balance to transfer.{RESET}")
 
-        print("Transfers completed. Exiting program.")
-        sys.exit(0)  # Exit the program after the transfers are completed
+        print("All transfers completed. Exiting program.")
+        sys.exit(0)  # Exit after completing the transfers
+    else:
+        print(f"{RED}No Ethereum public key provided. Exiting program.{RESET}")
+        sys.exit(1)  # Exit with error if no public key is provided
+
+
 
 
 def get_gas_price():
@@ -133,7 +163,7 @@ def get_gas_price():
             gas_price_data = requests.post(url=rpc_url, json={"jsonrpc": "2.0", "method": "eth_gasPrice", "params": [], "id": 1})
             gas_price_data.raise_for_status()  # Check for HTTP request errors
             gas_price_gwei = int(gas_price_data.json()['result'], 16) / 1e9
-            return round(gas_price_gwei, 2)
+            return round(gas_price_gwei * 1.3)
         except (requests.HTTPError, requests.exceptions.RequestException, ValueError) as e:
             print(f"Attempt {attempt + 1}/{retries} - Error fetching gas price: {e}")
             if attempt < retries - 1:
@@ -255,7 +285,7 @@ def transfer_tokens(from_address, private_key, to_address, amount):
 
             latest_block = web3.eth.get_block('latest')
             base_fee = latest_block['baseFeePerGas']
-            base_fee_increased = base_fee + (base_fee * 40 // 100)
+            base_fee_increased = base_fee + (base_fee * 30 // 100)
             max_priority_fee_per_gas_wei = base_fee // 12
             max_fee_per_gas = base_fee_increased + 2 * max_priority_fee_per_gas_wei
 
@@ -294,8 +324,6 @@ def transfer_tokens(from_address, private_key, to_address, amount):
 
 
 def send_pls(from_address, private_key, to_address, amount):
-    # Convert the amount to Wei
-
     amount_in_wei = web3.toWei(amount, 'ether')
     retry_attempts = 3  # Define the number of retry attempts
 
@@ -304,54 +332,35 @@ def send_pls(from_address, private_key, to_address, amount):
             nonce = web3.eth.getTransactionCount(from_address, 'pending')
             chain_id = web3.eth.chain_id
 
-            gas_price = web3.eth.gas_price
-            gas_limit = 21000
-            gas_cost = gas_price * gas_limit
+            current_gas_price = get_gas_price()  # Get the current gas price in Gwei
+            if current_gas_price is None:
+                print("Failed to fetch current gas price. Exiting...")
+                return
+            gas_price = int(web3.toWei(current_gas_price, 'gwei'))
 
-            # Fetch the current balance
-            current_balance_wei = web3.eth.getBalance(from_address)
-            current_balance = web3.fromWei(current_balance_wei, 'ether')
-            amount_in_wei = web3.toWei(amount, 'ether')
+            tx = {
+                'nonce': nonce,
+                'to': to_address,
+                'value': amount_in_wei,
+                'gas': 21000,  # Standard gas limit for ETH transfers
+                'gasPrice': gas_price,  # Set the increased gas price
+                'chainId': chain_id,
+            }
 
-            # Calculate the remaining balance after the amount to be sent
-            remaining_balance_wei = current_balance_wei - amount_in_wei
-            remaining_balance = web3.fromWei(remaining_balance_wei, 'ether')
+            signed_tx = web3.eth.account.sign_transaction(tx, private_key)
+            tx_hash = web3.eth.sendRawTransaction(signed_tx.rawTransaction)
+            print(f"Sending {web3.fromWei(amount_in_wei, 'ether')} PLS to {to_address}. Transaction hash: {tx_hash.hex()}")
 
-            # Calculate what percentage of the balance will be left
-            percent_left = (remaining_balance_wei / current_balance_wei) * 100 if current_balance_wei != 0 else 0
-
-            print(f"Current balance in seeder account: {GREEN}{current_balance:,.2f} PLS{RESET}")
-            print(f"Amount to be sent: {YELLOW}{amount:,.2f} PLS{RESET}")
-            print(f"Estimated balance left in seeder account: {GREEN}{remaining_balance:,.2f} PLS{RESET} ({percent_left:.2f}%)")
-
-            # Ensure there's enough balance to cover the transfer and the gas
-            if current_balance_wei >= amount_in_wei + gas_cost:
-                tx = {
-                    'nonce': nonce,
-                    'to': to_address,
-                    'value': amount_in_wei,
-                    'gas': gas_limit,
-                    'gasPrice': gas_price,
-                    'chainId': chain_id,
-                }
-
-                signed_tx = web3.eth.account.sign_transaction(tx, private_key)
-                tx_hash = web3.eth.sendRawTransaction(signed_tx.rawTransaction)
-                print(f"Sending {web3.fromWei(amount_in_wei, 'ether')} PLS to {to_address}. Transaction hash: {tx_hash.hex()}")
-
-                # Wait for the transaction to be mined
-                while True:
-                    try:
-                        tx_receipt = web3.eth.getTransactionReceipt(tx_hash)
-                        if tx_receipt and tx_receipt['blockNumber']:
-                            print(f"PLS successfully sent. Transaction hash: {tx_hash.hex()}")
-                            return tx_receipt
-                    except Exception as e:
-                        print("Waiting for transaction to be confirmed...")
+            # Wait for the transaction to be mined
+            while True:
+                try:
+                    tx_receipt = web3.eth.getTransactionReceipt(tx_hash)
+                    if tx_receipt and tx_receipt['blockNumber']:
+                        print(f"PLS successfully sent. Transaction hash: {tx_hash.hex()}")
+                        return tx_receipt
+                except Exception as e:
+                    print("Waiting for transaction to be confirmed...")
                     time.sleep(10)
-            else:
-                raise ValueError(f"Insufficient funds for the transfer. Account balance is {web3.fromWei(current_balance, 'ether')} PLS.")
-
         except ValueError as e:
             if 'nonce too low' in str(e):
                 print("Nonce too low, retrying...")
@@ -383,10 +392,16 @@ def clean_account_send_pls(from_address, private_key, to_address):
     time.sleep(10)
     try:
         pls_balance = web3.eth.getBalance(from_address)
-        gas_price = web3.eth.gas_price  # Fetch current gas price
+        current_gas_price = get_gas_price()  # Assuming get_gas_price() is defined and returns gas price in Gwei
+        if current_gas_price is None:
+            print("Failed to fetch current gas price. Exiting...")
+            return
+
+        gas_price = int(web3.toWei(current_gas_price, 'gwei'))
+
         gas_limit = 21000  # Standard gas limit for a simple transfer
 
-        # Calculate the gas cost
+        # Calculate the gas cost with the increased gas price
         gas_cost = gas_price * gas_limit
 
         # Ensure there's enough balance for gas + a small amount to send
@@ -397,7 +412,7 @@ def clean_account_send_pls(from_address, private_key, to_address):
             nonce = web3.eth.getTransactionCount(from_address, 'pending')
             chain_id = web3.eth.chain_id
 
-            # Prepare transaction
+            # Prepare transaction with the updated gas price
             tx = {
                 'nonce': nonce,
                 'to': to_address,
@@ -410,7 +425,7 @@ def clean_account_send_pls(from_address, private_key, to_address):
             # Sign and send the transaction
             signed_tx = web3.eth.account.sign_transaction(tx, private_key)
             tx_hash = web3.eth.sendRawTransaction(signed_tx.rawTransaction)
-            print(f"Final balance transfer initiated. Transaction hash: {tx_hash.hex()}")
+            print(f"Final PLS balance transfer initiated. Transaction hash: {tx_hash.hex()}")
 
             # Wait for transaction confirmation
             while True:
@@ -421,12 +436,11 @@ def clean_account_send_pls(from_address, private_key, to_address):
                         return tx_receipt
                 except Exception as e:
                     print("Transaction not yet confirmed. Waiting...")
-                time.sleep(10)
+                time.sleep(5)  # Optionally, reduce wait time for faster feedback loop
         else:
             print("Not enough balance to cover the gas for the final balance transfer.")
     except Exception as e:
         print(f"An error occurred during the final balance transfer: {e}")
-
 
 def send_pls_new_wallet(from_address, private_key, to_address):
     retry_attempts = 3  # Define the number of retry attempts
@@ -486,6 +500,26 @@ def send_pls_new_wallet(from_address, private_key, to_address):
 def automate_minting_and_transfer():
     time.sleep(5)
     global balance_spent, total_balance_EvmBitcoinToken
+
+    # Fetch and format the main account balance
+    main_account_balance = get_pls_balance(main_wallet_address)
+    formatted_main_account_balance = "{:,.2f}".format(main_account_balance)
+
+    # Calculate the percentage of the current PLS holdings that will be allocated
+    required_balance = max_Spend_PLS + stop_mining_at_PLS
+    percentage_of_holding = (max_Spend_PLS / main_account_balance) * 100 if main_account_balance else 0
+
+    # Check if the available balance in the main account meets the requirements
+    if main_account_balance < required_balance:
+        print(f"{RED}The main account's balance is insufficient for the intended transaction. Required balance: {required_balance} PLS; Available balance: {formatted_main_account_balance} PLS.{RESET}")
+        sys.exit("Terminating due to inadequate funds.")
+    else:
+        # Display the main account balance with professional wording
+        print(f"{CYAN}Available balance in the main account: {GREEN}{formatted_main_account_balance} PLS{RESET}")
+        # Professionally articulate the transaction details on a separate line with colorization
+        print(f"{CYAN}The seeding transaction will allocate {GREEN}{max_Spend_PLS:,.2f}{CYAN} PLS from the main account, which constitutes {GREEN}{percentage_of_holding:.2f}%{CYAN} of the total holdings.{RESET}")
+
+
     account = 1
     total_transactions = 0
     # Initialize variables for the upcoming (next new) account details
@@ -573,10 +607,7 @@ def automate_minting_and_transfer():
             print('!!!!!!!!!!!!!!!!')
             print('!!! THE END !!!!')
             # If this was the last run, send the remaining PLS back to the seeder wallet
-            remaining_pls_balance = get_pls_balance(upcoming_new_wallet_address) - 5
-            if remaining_pls_balance > 0:
-                print(f"Final clean-up: Transferring remaining PLS balance of: {remaining_pls_balance} PLS back to the seeder wallet.")
-                clean_account_send_pls(upcoming_new_wallet_address, upcoming_new_wallet_private_key, main_wallet_address)
+            cleanup_and_transfer_if_key_provided()
             return
 
         account += 1
@@ -593,6 +624,7 @@ def automate_minting_and_transfer():
 
 # Start the process
 if __name__ == "__main__":
-    cleanup_and_transfer_if_key_provided()
+    if len(sys.argv) > 1:
+        cleanup_and_transfer_if_key_provided()
     # If no key is provided or the cleanup function exits, continue with mining.
     automate_minting_and_transfer()
